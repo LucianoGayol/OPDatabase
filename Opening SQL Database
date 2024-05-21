@@ -1,0 +1,60 @@
+CREATE DATABASE OpeningSA;
+-- EJECUTAR LUEGO DE CREAR DATABASE
+-- DE ESTA MANERA CREAREMOS LAS TABLAS DE LA BASE DE DATOS OpeningSA
+USE OpeningSA;
+
+CREATE TABLE Pieza (
+    Id_Pieza VARCHAR(25) PRIMARY KEY,
+    Peso_STD FLOAT,
+    Automático TEXT,
+    Ciclo_STD FLOAT,
+    Bocas INT
+);
+
+CREATE TABLE Maquina (
+    Id_Maquina VARCHAR(25) PRIMARY KEY,
+    Tiempo_disponible FLOAT,
+    Tiempo_productivo FLOAT,
+    Utilizacion FLOAT,
+    Tiempo_teorico_requerido FLOAT,
+    Rendimiento FLOAT,
+    Scrap FLOAT,
+    Tiempo_Piezas_Buenas FLOAT,
+    OEE FLOAT
+);
+
+CREATE TABLE Matriz (
+    Id_Matriz VARCHAR(25) PRIMARY KEY,
+    Peso_Matriz FLOAT,
+    Estante FLOAT,
+    Sector TEXT
+);
+
+CREATE TABLE Materiales (
+    Id_Materiales VARCHAR(25) PRIMARY KEY,
+    Stock FLOAT,
+    Proveedor TEXT
+);
+
+CREATE TABLE Produccion (
+    Id_Produccion VARCHAR(25) PRIMARY KEY,
+    Id_Pieza VARCHAR(25),
+    Id_Maquina VARCHAR(25),
+    Id_Matriz VARCHAR(25),
+    Id_Materiales VARCHAR(25),
+    Fecha DATE,
+    Cantidad_a_stock INT,
+    Cantidad_producida INT,
+    Scrap INT,
+    Motivo_descarte TEXT,
+    Peso_real FLOAT,
+    Ciclo_real FLOAT,
+    Tiempo_real FLOAT,
+    Operario TEXT,
+    Encargado TEXT,
+    Observaciones TEXT,
+    FOREIGN KEY (Id_Pieza) REFERENCES Pieza(Id_Pieza),
+    FOREIGN KEY (Id_Maquina) REFERENCES Maquina(Id_Maquina),
+    FOREIGN KEY (Id_Matriz) REFERENCES Matriz(Id_Matriz),
+    FOREIGN KEY (Id_Materiales) REFERENCES Materiales(Id_Materiales)
+);
