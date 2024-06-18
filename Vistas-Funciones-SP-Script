@@ -1,0 +1,224 @@
+CREATE VIEW ProduccionPorMaquina AS
+SELECT 
+    p.Id_Maquina,
+    SUM(p.Cantidad_producida) AS Total_Producido,
+    SUM(p.Scrap) AS Total_Scrap
+FROM 
+    Produccion p
+JOIN 
+    Maquina m ON p.Id_Maquina = m.Id_Maquina
+GROUP BY 
+    p.Id_Maquina, m.Utilizacion;
+
+---------------------------------
+---------------------------------
+
+
+CREATE VIEW CalidadPorPieza AS
+SELECT 
+    p.Id_Pieza,
+    pe.Peso_STD,
+    (SUM(p.Scrap) / SUM(p.Cantidad_producida)) * 100 AS Porcentaje_Scrap,
+    SUM(p.Peso_real) / COUNT(p.Id_Pieza) AS Promedio_Peso_Real
+FROM 
+    Produccion p
+JOIN 
+    Pieza pe ON p.Id_Pieza = pe.Id_Pieza
+GROUP BY 
+    p.Id_Pieza, pe.Peso_STD;
+
+---------------------------------
+---------------------------------
+
+CREATE VIEW KilosConsumidosPorFecha AS
+SELECT 
+    p.Fecha,
+    m.Id_Materiales,
+    SUM(p.Peso_real) AS Kilos_Consumidos
+FROM 
+    Produccion p
+JOIN 
+    Materiales m ON p.Id_Materiales = m.Id_Materiales
+GROUP BY 
+    p.Fecha, m.Id_Materiales;
+
+---------------------------------
+---------------------------------
+
+	CREATE FUNCTION dbo.CalcularUtilizacion(
+    @Id_Maquina VARCHAR(25)
+)
+RETURNS FLOAT
+AS
+BEGIN
+    DECLARE @Utilizacion FLOAT
+    DECLARE @TiempoProductivo FLOAT
+    DECLARE @TiempoDisponible FLOAT
+
+    SELECT 
+        @TiempoProductivo = SUM(Tiempo_productivo),
+        @TiempoDisponible = SUM(Tiempo_disponible)
+    FROM 
+        Produccion
+    WHERE 
+        Id_Maquina = @Id_Maquina
+
+    IF @TiempoDisponible = 0
+        SET @Utilizacion = 0
+    ELSE
+        SET @Utilizacion = (@TiempoProductivo / @TiempoDisponible) * 100
+
+    RETURN @Utilizacion
+END;
+
+---------------------------------
+---------------------------------
+
+CREATE FUNCTION dbo.CalcularScrap(
+    @Id_Maquina VARCHAR(25)
+)
+RETURNS FLOAT
+AS
+BEGIN
+    DECLARE @PorcentajeScrap FLOAT
+    DECLARE @Scrap INT
+    DECLARE @CantidadProducida INT
+
+    SELECT 
+        @Scrap = SUM(Scrap),
+        @CantidadProducida = SUM(Cantidad_producida)
+    FROM 
+        Produccion
+    WHERE 
+        Id_Maquina = @Id_Maquina
+
+    IF @CantidadProducida = 0
+        SET @PorcentajeScrap = 0
+    ELSE
+        SET @PorcentajeScrap = (@Scrap * 1.0 / @CantidadProducida) * 100
+
+    RETURN @PorcentajeScrap
+END;
+
+---------------------------------
+---------------------------------
+
+
+CREATE FUNCTION dbo.CalcularRendimiento(
+    @Id_Maquina VARCHAR(25)
+)
+RETURNS FLOAT
+AS
+BEGIN
+    DECLARE @Rendimiento FLOAT
+    DECLARE @TiempoPiezasBuenas FLOAT
+    DECLARE @TiempoProductivo FLOAT
+
+    SELECT 
+        @TiempoPiezasBuenas = SUM(Tiempo_Piezas_Buenas),
+        @TiempoProductivo = SUM(Tiempo_productivo)
+    FROM 
+        Produccion
+    WHERE 
+        Id_Maquina = @Id_Maquina
+
+    IF @TiempoProductivo = 0
+        SET @Rendimiento = 0
+    ELSE
+        SET @Rendimiento = (@TiempoPiezasBuenas / @TiempoProductivo) * 100
+
+    RETURN @Rendimiento
+END;
+
+---------------------------------
+---------------------------------
+
+CREATE FUNCTION dbo.CalcularOEE(
+    @Id_Maquina VARCHAR(25)
+)
+RETURNS FLOAT
+AS
+BEGIN
+    DECLARE @OEE FLOAT
+    DECLARE @Utilizacion FLOAT
+    DECLARE @Rendimiento FLOAT
+    DECLARE @PorcentajeScrap FLOAT
+
+    SET @Utilizacion = dbo.CalcularUtilizacion(@Id_Maquina)
+    SET @Rendimiento = dbo.CalcularRendimiento(@Id_Maquina)
+    SET @PorcentajeScrap = dbo.CalcularScrap(@Id_Maquina)
+
+    SET @OEE = @Utilizacion * @Rendimiento * (1 - @PorcentajeScrap / 100)
+
+    RETURN @OEE
+END;
+
+---------------------------------
+---------------------------------
+
+CREATE PROCEDURE SP_ObtenerMaterialesConsumidosPorFecha
+    @Fecha DATE
+AS
+BEGIN
+    SELECT 
+        p.Id_Materiales,
+        m.Proveedor,
+        SUM(p.Peso_real) AS PesoConsumido
+    FROM 
+        Produccion p
+    INNER JOIN 
+        Materiales m ON p.Id_Materiales = m.Id_Materiales
+    WHERE 
+        p.Fecha = @Fecha
+    GROUP BY 
+        p.Id_Materiales, m.Proveedor;
+END;
+
+---------------------------------
+---------------------------------
+
+CREATE PROCEDURE SP_UltimaProduccionPieza
+    @Id_Pieza VARCHAR(25)
+AS
+BEGIN
+    SELECT TOP 1
+        p.Fecha AS Ultima_Fecha_Produccion,
+        p.Id_Maquina AS Maquina,
+        p.Cantidad_producida AS Cantidad_Producida,
+        p.Encargado AS Encargado
+    FROM
+        Produccion p
+    WHERE
+        p.Id_Pieza = @Id_Pieza
+    ORDER BY
+        p.Fecha DESC;
+END;
+
+---------------------------------
+---------------------------------
+
+
+-- Inserción de datos en la tabla Pieza
+INSERT INTO Pieza (Id_Pieza, Peso_STD, Automático, Ciclo_STD, Bocas)
+VALUES
+     ('', 0, '', 0, 0);
+
+-- Inserción de datos en la tabla Maquina
+INSERT INTO Maquina (Id_Maquina, Tiempo_disponible, Tiempo_productivo, Utilizacion, Tiempo_teorico_requerido, Rendimiento, Scrap, Tiempo_Piezas_Buenas, OEE)
+VALUES
+    ('', 0, 0, 0, 0, 0, 0, 0, 0);
+
+-- Inserción de datos en la tabla Matriz
+INSERT INTO Matriz (Id_Matriz, Peso_Matriz, Estante, Sector)
+VALUES
+   ('', 0, 0, '');
+
+-- Inserción de datos en la tabla Materiales
+INSERT INTO Materiales (Id_Materiales, Stock, Proveedor)
+VALUES
+    ('', 0, '');
+
+-- Inserción de datos en la tabla Produccion
+INSERT INTO Produccion (Id_Produccion, Id_Pieza, Id_Maquina, Id_Matriz, Id_Materiales, Fecha, Cantidad_a_stock, Cantidad_producida, Scrap, Motivo_descarte, Peso_real, Ciclo_real, Tiempo_real, Operario, Encargado, Observaciones)
+VALUES
+    ('', '', '', '', '', '2024-01-01', 0, 0, 0, '', 0.0, 0.0, 0.0, '', '', '');
