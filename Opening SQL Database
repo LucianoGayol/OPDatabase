@@ -1,40 +1,137 @@
-CREATE DATABASE OpeningSA;
+CREATE DATABASE Opening;
 -- EJECUTAR LUEGO DE CREAR DATABASE
 -- DE ESTA MANERA CREAREMOS LAS TABLAS DE LA BASE DE DATOS OpeningSA
-USE OpeningSA;
+USE Opening;
+
+----------------
+----------------
+
+CREATE TABLE Proveedor (
+    Id_Proveedor VARCHAR(25) PRIMARY KEY,
+    Nombre VARCHAR(50),
+    Apellido VARCHAR(50),
+    Contacto VARCHAR(50),
+    Direccion VARCHAR(50)
+);
+
+CREATE TABLE Materiales (
+    Id_Materiales VARCHAR(25) PRIMARY KEY,
+	Nombre_Material VARCHAR(25),
+    Stock FLOAT,
+    Id_Proveedor VARCHAR(25),
+    FOREIGN KEY (Id_Proveedor) REFERENCES Proveedor(Id_Proveedor)
+);
 
 CREATE TABLE Pieza (
     Id_Pieza VARCHAR(25) PRIMARY KEY,
+	Nombre_Pieza VARCHAR (50),
+	Id_Materiales VARCHAR(25),
     Peso_STD FLOAT,
     Automático TEXT,
     Ciclo_STD FLOAT,
-    Bocas INT
+    Bocas INT,
+	FOREIGN KEY (Id_Materiales) REFERENCES Materiales(Id_Materiales)
 );
 
-CREATE TABLE Maquina (
-    Id_Maquina VARCHAR(25) PRIMARY KEY,
-    Tiempo_disponible FLOAT,
-    Tiempo_productivo FLOAT,
-    Utilizacion FLOAT,
-    Tiempo_teorico_requerido FLOAT,
-    Rendimiento FLOAT,
-    Scrap FLOAT,
-    Tiempo_Piezas_Buenas FLOAT,
-    OEE FLOAT
+CREATE TABLE Sector (
+    Id_Sector VARCHAR(25) PRIMARY KEY,
+    SectorNombre VARCHAR(50),
+    Descripcion TEXT
 );
 
 CREATE TABLE Matriz (
     Id_Matriz VARCHAR(25) PRIMARY KEY,
     Peso_Matriz FLOAT,
-    Estante FLOAT,
-    Sector TEXT
+    Estante VARCHAR(25), 
+	Id_Pieza VARCHAR(25),
+    Id_Sector VARCHAR(25),
+	FOREIGN KEY (Id_Pieza) REFERENCES Pieza(Id_Pieza),
+    FOREIGN KEY (Id_Sector) REFERENCES Sector(Id_Sector)
+  );
+
+CREATE TABLE Operario (
+    Id_Operario VARCHAR(25) PRIMARY KEY,
+    Nombre VARCHAR(50),
+    Apellido VARCHAR(50),
+    FechaIngreso DATE,
+    Id_Sector VARCHAR(25),
+    FOREIGN KEY (Id_Sector) REFERENCES Sector(Id_Sector)
 );
 
-CREATE TABLE Materiales (
-    Id_Materiales VARCHAR(25) PRIMARY KEY,
-    Stock FLOAT,
-    Proveedor TEXT
+CREATE TABLE Encargado (
+    Id_Encargado VARCHAR(25) PRIMARY KEY,
+    Nombre VARCHAR(50),
+    Apellido VARCHAR(50),
+    FechaIngreso DATE,
+    Id_Sector VARCHAR(25),
+    FOREIGN KEY (Id_Sector) REFERENCES Sector(Id_Sector)
 );
+
+CREATE TABLE MotivoDescarte (
+    Id_Motivo VARCHAR(25) PRIMARY KEY,
+    DescripcionMotivo TEXT
+);
+
+CREATE TABLE Herramientas (
+    Id_Herramienta VARCHAR(25) PRIMARY KEY,
+    Nombre VARCHAR(50),
+    Tipo VARCHAR(50),
+    Fecha_Adquisicion DATE,
+    Id_Sector VARCHAR(25),
+    FOREIGN KEY (Id_Sector) REFERENCES Sector(Id_Sector)
+);
+
+CREATE TABLE MantenimientoMatriz (
+    Id_MantenimientoM VARCHAR(25) PRIMARY KEY,
+    Id_Matriz VARCHAR(25),
+    FechaMantenimiento DATE,
+    TipoMantenimiento VARCHAR(50),
+    Descripcion TEXT,
+    Id_Operario VARCHAR(25),
+    Costo FLOAT,
+    FOREIGN KEY (Id_Matriz) REFERENCES Matriz(Id_Matriz),
+    FOREIGN KEY (Id_Operario) REFERENCES Operario(Id_Operario)
+);
+
+CREATE TABLE Maquina (
+    Id_Maquina VARCHAR(25) PRIMARY KEY,
+    Marca VARCHAR(50),
+    Modelo VARCHAR(50),
+    Capacidad FLOAT,
+    Estado VARCHAR(50),
+    Id_Sector INT
+);
+
+CREATE TABLE Mantenimiento (
+    Id_Mantenimiento VARCHAR(25) PRIMARY KEY,
+    Id_Maquina VARCHAR(25),
+    Fecha DATE,
+    Descripcion TEXT,
+    Id_Operario VARCHAR(25),
+    FOREIGN KEY (Id_Maquina) REFERENCES Maquina(Id_Maquina),
+    FOREIGN KEY (Id_Operario) REFERENCES Operario(Id_Operario)
+);
+
+CREATE TABLE Autoelevadores (
+    Id_Autoelevador VARCHAR(25) PRIMARY KEY,
+    Marca VARCHAR(50),
+    Modelo VARCHAR(50),
+    Capacidad_Carga FLOAT,
+    Estado VARCHAR(50),
+    Id_Sector VARCHAR(25),
+    FOREIGN KEY (Id_Sector) REFERENCES Sector(Id_Sector)
+);
+
+CREATE TABLE Gruas (
+    Id_Grua VARCHAR(25) PRIMARY KEY,
+    Marca VARCHAR(50),
+    Modelo VARCHAR(50),
+    Capacidad_Carga FLOAT,
+    Estado VARCHAR(50),
+    Id_Sector VARCHAR(25),
+    FOREIGN KEY (Id_Sector) REFERENCES Sector(Id_Sector)
+);
+
 
 CREATE TABLE Produccion (
     Id_Produccion VARCHAR(25) PRIMARY KEY,
@@ -46,15 +143,18 @@ CREATE TABLE Produccion (
     Cantidad_a_stock INT,
     Cantidad_producida INT,
     Scrap INT,
-    Motivo_descarte TEXT,
+    Id_Motivo VARCHAR(25),
     Peso_real FLOAT,
     Ciclo_real FLOAT,
     Tiempo_real FLOAT,
-    Operario TEXT,
-    Encargado TEXT,
+    Id_Operario VARCHAR(25),
+    Id_Encargado VARCHAR(25),
     Observaciones TEXT,
     FOREIGN KEY (Id_Pieza) REFERENCES Pieza(Id_Pieza),
     FOREIGN KEY (Id_Maquina) REFERENCES Maquina(Id_Maquina),
     FOREIGN KEY (Id_Matriz) REFERENCES Matriz(Id_Matriz),
+    FOREIGN KEY (Id_Operario) REFERENCES Operario(Id_Operario),
+    FOREIGN KEY (Id_Encargado) REFERENCES Encargado(Id_Encargado),
+    FOREIGN KEY (Id_Motivo) REFERENCES MotivoDescarte(Id_Motivo),
     FOREIGN KEY (Id_Materiales) REFERENCES Materiales(Id_Materiales)
 );
