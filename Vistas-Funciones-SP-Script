@@ -1,157 +1,164 @@
-CREATE VIEW ProduccionPorMaquina AS
-SELECT 
-    p.Id_Maquina,
-    SUM(p.Cantidad_producida) AS Total_Producido,
-    SUM(p.Scrap) AS Total_Scrap
-FROM 
-    Produccion p
-JOIN 
-    Maquina m ON p.Id_Maquina = m.Id_Maquina
-GROUP BY 
-    p.Id_Maquina, m.Utilizacion;
-
----------------------------------
----------------------------------
-
-
-CREATE VIEW CalidadPorPieza AS
-SELECT 
-    p.Id_Pieza,
-    pe.Peso_STD,
-    (SUM(p.Scrap) / SUM(p.Cantidad_producida)) * 100 AS Porcentaje_Scrap,
-    SUM(p.Peso_real) / COUNT(p.Id_Pieza) AS Promedio_Peso_Real
-FROM 
-    Produccion p
-JOIN 
-    Pieza pe ON p.Id_Pieza = pe.Id_Pieza
-GROUP BY 
-    p.Id_Pieza, pe.Peso_STD;
-
----------------------------------
----------------------------------
-
 CREATE VIEW KilosConsumidosPorFecha AS
 SELECT 
     p.Fecha,
     m.Id_Materiales,
+    m.Nombre_Material,
+	e.Nombre,
+	e.Apellido,
+	e.Contacto,
     SUM(p.Peso_real) AS Kilos_Consumidos
 FROM 
     Produccion p
 JOIN 
     Materiales m ON p.Id_Materiales = m.Id_Materiales
+JOIN
+    Proveedor e ON m.Id_Proveedor = e.Id_Proveedor
 GROUP BY 
-    p.Fecha, m.Id_Materiales;
+    p.Fecha, m.Id_Materiales, m.Nombre_Material, e.Nombre, e.Apellido, e.Contacto;
+
+	SELECT * FROM KilosConsumidosPorFecha
 
 ---------------------------------
 ---------------------------------
 
-	CREATE FUNCTION dbo.CalcularUtilizacion(
-    @Id_Maquina VARCHAR(25)
+	CREATE VIEW ResumenProduccionMensual AS
+SELECT 
+    YEAR(p.Fecha) AS Anio,
+    MONTH(p.Fecha) AS Mes,
+    SUM(p.Cantidad_producida) AS Cantidad_Total_Producida,
+    SUM(p.Scrap) AS Scrap_Total
+FROM 
+    Produccion p
+GROUP BY 
+    YEAR(p.Fecha), MONTH(p.Fecha);
+
+	SELECT * FROM ResumenProduccionMensual
+
+---------------------------------
+---------------------------------
+
+
+--------------------------------
+---------------------------------
+CREATE VIEW ProducciónPorMáquina AS
+SELECT 
+    p.Id_Maquina,
+    SUM(p.Cantidad_producida) AS Total_Producido,
+    SUM(p.Scrap) AS Total_Scrap,
+    COUNT(DISTINCT p.Fecha) AS Dias_Produccion
+FROM 
+    Produccion p
+GROUP BY 
+    p.Id_Maquina;
+
+	SELECT * FROM ProducciónPorMáquina
+	
+---------------------------------
+---------------------------------
+CREATE VIEW ProduccionMensualPorMaquina AS
+SELECT
+    p.Id_Maquina,
+    m.Modelo,
+    YEAR(p.Fecha) AS Año,
+    MONTH(p.Fecha) AS Mes,
+    SUM(p.Cantidad_producida) AS Total_Producido,
+    SUM(p.Scrap) AS Total_Scrap
+FROM
+    Produccion p
+JOIN
+    Maquina m ON p.Id_Maquina = m.Id_Maquina
+GROUP BY
+    p.Id_Maquina,
+    m.modelo,
+    YEAR(p.Fecha),
+    MONTH(p.Fecha);
+
+	SELECT * FROM ProduccionMensualPorMaquina
+	---------------------------------
+---------------------------------
+
+	CREATE VIEW CalidadPorOperario AS
+SELECT
+    o.Id_Operario,
+    o.Nombre,
+    SUM(p.Scrap) AS Cantidad_Scrap,
+	SUM(p.Cantidad_producida) AS Cantidad_Producida,
+    s.SectorNombre AS Sector_Productivo
+FROM
+    Produccion p
+JOIN
+    Operario o ON p.Id_Operario = o.Id_Operario
+JOIN
+	Sector s ON o.Id_Sector = s.Id_Sector
+GROUP BY
+    o.Id_Operario,
+    o.Nombre,
+	s.SectorNombre;
+
+	SELECT * FROM CalidadPorOperario
+	
+	---------------------------------
+---------------------------------
+
+CREATE FUNCTION dbo.ProduccionConScrapMayorAlPromedio(
+    @FechaInicio DATE,
+    @FechaFin DATE
 )
-RETURNS FLOAT
+RETURNS TABLE
 AS
-BEGIN
-    DECLARE @Utilizacion FLOAT
-    DECLARE @TiempoProductivo FLOAT
-    DECLARE @TiempoDisponible FLOAT
-
+RETURN
+(
+    WITH PromedioScrap AS
+    (
+        SELECT 
+            AVG(Scrap * 1.0 / Cantidad_producida) AS Promedio
+        FROM 
+            Produccion
+        WHERE
+            Fecha BETWEEN @FechaInicio AND @FechaFin
+    )
     SELECT 
-        @TiempoProductivo = SUM(Tiempo_productivo),
-        @TiempoDisponible = SUM(Tiempo_disponible)
+        p.Id_Produccion,
+        p.Id_Pieza,
+        p.Id_Maquina,
+        p.Fecha,
+        p.Scrap,
+        p.Cantidad_producida,
+        (p.Scrap * 1.0 / p.Cantidad_producida) AS Porcentaje_Scrap
     FROM 
-        Produccion
+        Produccion p
+    CROSS JOIN 
+        PromedioScrap ps
     WHERE 
-        Id_Maquina = @Id_Maquina
+        p.Fecha BETWEEN @FechaInicio AND @FechaFin
+        AND (p.Scrap * 1.0 / p.Cantidad_producida) > ps.Promedio
+);
 
-    IF @TiempoDisponible = 0
-        SET @Utilizacion = 0
-    ELSE
-        SET @Utilizacion = (@TiempoProductivo / @TiempoDisponible) * 100
-
-    RETURN @Utilizacion
-END;
-
+SELECT * FROM dbo.ProduccionConScrapMayorAlPromedio('2024-01-01', '2024-03-31');
+	
+	---------------------------------
 ---------------------------------
----------------------------------
-
-CREATE FUNCTION dbo.CalcularScrap(
-    @Id_Maquina VARCHAR(25)
+CREATE FUNCTION dbo.ProduccionTotalPorMaquina(
+    @FechaInicio DATE,
+    @FechaFin DATE
 )
-RETURNS FLOAT
+RETURNS TABLE
 AS
-BEGIN
-    DECLARE @PorcentajeScrap FLOAT
-    DECLARE @Scrap INT
-    DECLARE @CantidadProducida INT
-
-    SELECT 
-        @Scrap = SUM(Scrap),
-        @CantidadProducida = SUM(Cantidad_producida)
-    FROM 
+RETURN
+(
+    SELECT
+        Id_Maquina,
+        SUM(Cantidad_producida) AS Total_Producido
+    FROM
         Produccion
-    WHERE 
-        Id_Maquina = @Id_Maquina
+    WHERE
+        Fecha BETWEEN @FechaInicio AND @FechaFin
+    GROUP BY
+        Id_Maquina
+);
 
-    IF @CantidadProducida = 0
-        SET @PorcentajeScrap = 0
-    ELSE
-        SET @PorcentajeScrap = (@Scrap * 1.0 / @CantidadProducida) * 100
+SELECT * FROM dbo.ProduccionTotalPorMaquina('2024-01-01', '2024-03-31');
 
-    RETURN @PorcentajeScrap
-END;
-
----------------------------------
----------------------------------
-
-
-CREATE FUNCTION dbo.CalcularRendimiento(
-    @Id_Maquina VARCHAR(25)
-)
-RETURNS FLOAT
-AS
-BEGIN
-    DECLARE @Rendimiento FLOAT
-    DECLARE @TiempoPiezasBuenas FLOAT
-    DECLARE @TiempoProductivo FLOAT
-
-    SELECT 
-        @TiempoPiezasBuenas = SUM(Tiempo_Piezas_Buenas),
-        @TiempoProductivo = SUM(Tiempo_productivo)
-    FROM 
-        Produccion
-    WHERE 
-        Id_Maquina = @Id_Maquina
-
-    IF @TiempoProductivo = 0
-        SET @Rendimiento = 0
-    ELSE
-        SET @Rendimiento = (@TiempoPiezasBuenas / @TiempoProductivo) * 100
-
-    RETURN @Rendimiento
-END;
-
----------------------------------
----------------------------------
-
-CREATE FUNCTION dbo.CalcularOEE(
-    @Id_Maquina VARCHAR(25)
-)
-RETURNS FLOAT
-AS
-BEGIN
-    DECLARE @OEE FLOAT
-    DECLARE @Utilizacion FLOAT
-    DECLARE @Rendimiento FLOAT
-    DECLARE @PorcentajeScrap FLOAT
-
-    SET @Utilizacion = dbo.CalcularUtilizacion(@Id_Maquina)
-    SET @Rendimiento = dbo.CalcularRendimiento(@Id_Maquina)
-    SET @PorcentajeScrap = dbo.CalcularScrap(@Id_Maquina)
-
-    SET @OEE = @Utilizacion * @Rendimiento * (1 - @PorcentajeScrap / 100)
-
-    RETURN @OEE
-END;
 
 ---------------------------------
 ---------------------------------
@@ -162,16 +169,19 @@ AS
 BEGIN
     SELECT 
         p.Id_Materiales,
-        m.Proveedor,
+        r.Nombre,
+		r.Apellido,
         SUM(p.Peso_real) AS PesoConsumido
     FROM 
         Produccion p
     INNER JOIN 
         Materiales m ON p.Id_Materiales = m.Id_Materiales
+JOIN 
+		Proveedor r ON m.Id_Proveedor = r.Id_Proveedor
     WHERE 
         p.Fecha = @Fecha
     GROUP BY 
-        p.Id_Materiales, m.Proveedor;
+        p.Id_Materiales, r.Nombre, r.Apellido;
 END;
 
 ---------------------------------
@@ -185,9 +195,11 @@ BEGIN
         p.Fecha AS Ultima_Fecha_Produccion,
         p.Id_Maquina AS Maquina,
         p.Cantidad_producida AS Cantidad_Producida,
-        p.Encargado AS Encargado
+        E.Nombre AS NombreEncargado,
+		E.Apellido AS NombreEncargado
     FROM
         Produccion p
+JOIN Encargado e ON P.Id_Encargado = E.Id_Encargado
     WHERE
         p.Id_Pieza = @Id_Pieza
     ORDER BY
@@ -197,28 +209,49 @@ END;
 ---------------------------------
 ---------------------------------
 
+SELECT * FROM Materiales --VER STOCK INICIALES 20000 Y 10000 KILOS
 
--- Inserción de datos en la tabla Pieza
-INSERT INTO Pieza (Id_Pieza, Peso_STD, Automático, Ciclo_STD, Bocas)
-VALUES
-     ('', 0, '', 0, 0);
+CREATE TRIGGER trg_Actualizar_Inventario3
+ON Produccion
+AFTER INSERT
+AS
+BEGIN
+    UPDATE m
+    SET m.Stock = m.Stock - i.Cantidad_producida * i.Peso_real
+    FROM Materiales m
+    INNER JOIN inserted i ON m.Id_Materiales = i.Id_Materiales;
+END;
 
--- Inserción de datos en la tabla Maquina
-INSERT INTO Maquina (Id_Maquina, Tiempo_disponible, Tiempo_productivo, Utilizacion, Tiempo_teorico_requerido, Rendimiento, Scrap, Tiempo_Piezas_Buenas, OEE)
+  -- Inserción de datos en la tabla Produccion para prueba de Trigger
+INSERT INTO Produccion (Id_Produccion, Id_Pieza, Id_Maquina, Id_Matriz, Id_Materiales, Fecha, Cantidad_a_stock, Cantidad_producida, Scrap, Id_Motivo, Peso_real, Ciclo_real, Tiempo_real, Id_Operario, Id_Encargado, Observaciones)
 VALUES
-    ('', 0, 0, 0, 0, 0, 0, 0, 0);
+ ('PROD-0106', 'IH-0010-N', 'INY-0001', 'M-0010', 1, '2024-07-10', 1460, 1480, 20, 3, 0.052, 212.0, 12744.0, 5, 1, 'Sin novedades'),
+ ('PROD-0107', 'SB-0101-AZT', 'SOP-0001', 'M-0039', 2, '2024-02-28', 530, 540, 10, 1, 0.043, 212.0, 10840.0, 1, 2, 'Producción regular');
 
--- Inserción de datos en la tabla Matriz
-INSERT INTO Matriz (Id_Matriz, Peso_Matriz, Estante, Sector)
-VALUES
-   ('', 0, 0, '');
+	 SELECT * FROM Materiales --VER STOCK FINALES 
 
--- Inserción de datos en la tabla Materiales
-INSERT INTO Materiales (Id_Materiales, Stock, Proveedor)
-VALUES
-    ('', 0, '');
+ ---------------------------------
+---------------------------------
 
--- Inserción de datos en la tabla Produccion
-INSERT INTO Produccion (Id_Produccion, Id_Pieza, Id_Maquina, Id_Matriz, Id_Materiales, Fecha, Cantidad_a_stock, Cantidad_producida, Scrap, Motivo_descarte, Peso_real, Ciclo_real, Tiempo_real, Operario, Encargado, Observaciones)
+	ALTER TABLE Pieza
+ADD Stock INT DEFAULT 0;
+
+CREATE TRIGGER trg_Actualizar_StockPieza
+ON Produccion
+AFTER INSERT
+AS
+BEGIN
+    -- Actualizar el stock de las piezas
+    UPDATE p
+    SET p.Stock = ISNULL(p.Stock, 0) + i.Cantidad_a_stock
+    FROM Pieza p
+    INNER JOIN inserted i ON p.Id_Pieza = i.Id_Pieza;
+END;
+
+INSERT INTO Produccion (Id_Produccion, Id_Pieza, Id_Maquina, Id_Matriz, Id_Materiales, Fecha, Cantidad_a_stock, Cantidad_producida, Scrap, Id_Motivo, Peso_real, Ciclo_real, Tiempo_real, Id_Operario, Id_Encargado, Observaciones)
 VALUES
-    ('', '', '', '', '', '2024-01-01', 0, 0, 0, '', 0.0, 0.0, 0.0, '', '', '');
+ ('PROD-0108', 'IH-0001-N', 'INY-0001', 'M-0010', 1, '2024-07-10', 1460, 1480, 20, 3, 0.052, 212.0, 12744.0, 5, 1, 'Sin novedades'),
+ ('PROD-0109', 'IH-0002-N', 'SOP-0001', 'M-0039', 2, '2024-02-28', 530, 540, 10, 1, 0.043, 212.0, 10840.0, 1, 2, 'Producción regular');
+
+ 	 SELECT * FROM Pieza
+--
